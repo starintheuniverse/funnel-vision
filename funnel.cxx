@@ -1,4 +1,24 @@
+
+/* =============================================================================
+ * funnel.cxx
+ * Masado Ishii
+ * CIS 441 "Intro Comp. Graphics" (H.Childs)
+ * 2016-12-09
+ *
+ * Description:
+ *   My final project, "FunnelVision," to simulate portal-like visual effects
+ *   using the OpenGL and VTK frameworks.
+ *
+ * Attributions:
+ *   > Interactor and mapper derived from examples by Hank Childs.
+ *   > Other source code used as provided by Hank Childs, presumably derivative
+ *     of Kitware coders K.Martin, W.Schroeder, and B.Lorensen.
+ * =============================================================================
+ */
+
+
 /*=========================================================================
+  Kitware Copyright Notice:
 
   Program:   Visualization Toolkit
   Module:    SpecularSpheres.cxx
