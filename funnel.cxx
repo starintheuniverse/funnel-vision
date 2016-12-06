@@ -32,9 +32,7 @@
      PURPOSE.  See the above copyright notice for more information.
 
 =========================================================================*/
-//
-// This examples demonstrates the effect of specular lighting.
-//
+
 #include "vtkSmartPointer.h"
 #include "vtkSphereSource.h"
 #include "vtkPolyDataMapper.h"
@@ -66,7 +64,6 @@
 class vtk441Mapper;
 
 
-
 class Triangle
 {
   public:
@@ -76,114 +73,6 @@ class Triangle
       double         fieldValue[3]; // always between 0 and 1
       double         normals[3][3];
 };
-
-//
-// Function: GetTriangles
-//
-// Purpose: reads triangles from the geometry file: proj1e_geometry.vtk.
-//
-std::vector<Triangle>
-GetTriangles(void)
-{
-    vtkPolyDataReader *rdr = vtkPolyDataReader::New();
-    rdr->SetFileName("proj1e_geometry.vtk");
-    cerr << "Reading" << endl;
-    rdr->Update();
-    cerr << "Done reading" << endl;
-    if (rdr->GetOutput()->GetNumberOfCells() == 0)
-    {
-        cerr << "Unable to open file!!" << endl;
-        exit(EXIT_FAILURE);
-    }
-    vtkPolyData *pd = rdr->GetOutput();
-
-    int numTris = pd->GetNumberOfCells();
-    vtkPoints *pts = pd->GetPoints();
-    vtkCellArray *cells = pd->GetPolys();
-    vtkDoubleArray *var = (vtkDoubleArray *) pd->GetPointData()->GetArray("hardyglobal");
-    double *color_ptr = var->GetPointer(0);
-    vtkFloatArray *n = (vtkFloatArray *) pd->GetPointData()->GetNormals();
-    float *normals = n->GetPointer(0);
-    std::vector<Triangle> tris(numTris);
-    vtkIdType npts;
-    vtkIdType *ptIds;
-    int idx;
-    for (idx = 0, cells->InitTraversal() ; cells->GetNextCell(npts, ptIds) ; idx++)
-    {
-        if (npts != 3)
-        {
-            cerr << "Non-triangles!! ???" << endl;
-            exit(EXIT_FAILURE);
-        }
-        double *pt = NULL;
-        pt = pts->GetPoint(ptIds[0]);
-        tris[idx].X[0] = pt[0];
-        tris[idx].Y[0] = pt[1];
-        tris[idx].Z[0] = pt[2];
-        tris[idx].normals[0][0] = normals[3*ptIds[0]+0];
-        tris[idx].normals[0][1] = normals[3*ptIds[0]+1];
-        tris[idx].normals[0][2] = normals[3*ptIds[0]+2];
-        tris[idx].fieldValue[0] = (color_ptr[ptIds[0]]-1)/5.;
-        pt = pts->GetPoint(ptIds[1]);
-        tris[idx].X[1] = pt[0];
-        tris[idx].Y[1] = pt[1];
-        tris[idx].Z[1] = pt[2];
-        tris[idx].normals[1][0] = normals[3*ptIds[1]+0];
-        tris[idx].normals[1][1] = normals[3*ptIds[1]+1];
-        tris[idx].normals[1][2] = normals[3*ptIds[1]+2];
-        tris[idx].fieldValue[1] = (color_ptr[ptIds[1]]-1)/5.;
-        pt = pts->GetPoint(ptIds[2]);
-        tris[idx].X[2] = pt[0];
-        tris[idx].Y[2] = pt[1];
-        tris[idx].Z[2] = pt[2];
-        tris[idx].normals[2][0] = normals[3*ptIds[2]+0];
-        tris[idx].normals[2][1] = normals[3*ptIds[2]+1];
-        tris[idx].normals[2][2] = normals[3*ptIds[2]+2];
-        tris[idx].fieldValue[2] = (color_ptr[ptIds[2]]-1)/5.;
-    }
-
-    return tris;
-}
-
-//
-// Function: GetColorMap
-//
-// Purpose: returns a 256x3 array of colors
-//
-unsigned char *
-GetColorMap(void)
-{
-    unsigned char controlPts[8][3] =
-    {
-        {  71,  71, 219 },
-        {   0,   0,  91 },
-        {   0, 255, 255 },
-        {   0, 127,   0 },
-        { 255, 255,   0 },
-        { 255,  96,   0 },
-        { 107,   0,   0 },
-        { 224,  76,  76 },
-    };
-    int textureSize = 256;
-    unsigned char *ptr = new unsigned char[textureSize*3];
-    int nControlPts = 8;
-    double amountPerPair = ((double)textureSize-1.0)/(nControlPts-1.0);
-    for (int i = 0 ; i < textureSize ; i++)
-    {
-        int lowerControlPt = (int)(i/amountPerPair);
-        int upperControlPt = lowerControlPt+1;
-        if (upperControlPt >= nControlPts)
-            upperControlPt = lowerControlPt; // happens for i == textureSize-1
-
-        double proportion = (i/amountPerPair)-lowerControlPt;
-        for (int j = 0 ; j < 3 ; j++)
-            ptr[3*i+j] = controlPts[lowerControlPt][j]
-                       + proportion*(controlPts[upperControlPt][j]-
-                                     controlPts[lowerControlPt][j]);
-    }
-
-    return ptr;
-}
 
 
 class vtk441Mapper : public vtkOpenGLPolyDataMapper
@@ -336,9 +225,11 @@ class vtk441MapperPart2 : public vtk441Mapper
         glPopMatrix();
 
 
+        // Source portal: Use silhouette to refine the stencil buffer.
+        //...Some code
 
-
-
+        // Render portal view: Transform view coordinates.
+        
 
    }
 };
@@ -461,7 +352,7 @@ int main()
 
   // Add the actors to the renderer, set the background and size.
   //
-  bool doWindow1 = true;
+  bool doWindow1 = false;
   if (doWindow1)
      ren1->AddActor(win1Actor);
   ren1->SetBackground(0.0, 0.0, 0.0);
