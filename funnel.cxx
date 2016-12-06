@@ -249,6 +249,9 @@ class vtk441MapperPart1 : public vtk441Mapper
    
    virtual void RenderPiece(vtkRenderer *ren, vtkActor *act)
    {
+
+      /* This is a separate scene from part 2, which is static. */
+
       RemoveVTKOpenGLStateSideEffects();
       SetupLight();
       glBegin(GL_TRIANGLES);
@@ -260,6 +263,9 @@ class vtk441MapperPart1 : public vtk441Mapper
 };
 
 vtkStandardNewMacro(vtk441MapperPart1);
+
+
+
 
 class vtk441MapperPart2 : public vtk441Mapper
 {
@@ -277,11 +283,63 @@ class vtk441MapperPart2 : public vtk441Mapper
    {
        RemoveVTKOpenGLStateSideEffects();
        SetupLight();
-       glBegin(GL_TRIANGLES);
-       glVertex3f(-10, -10, -10);
-       glVertex3f(10, -10, 10);
-       glVertex3f(10, 10, 10);
-       glEnd();
+
+
+        GLuint shapes = glGenLists(2);
+
+        // unitSquare (display list): Square with vertices at (+-1, +-1, 0).
+        GLuint unitSquare = shapes+0;
+        glNewList(unitSquare, GL_COMPILE);
+        glBegin(GL_QUADS);
+            glVertex3f(1, 1, 0);
+            glVertex3f(-1, 1, 0);
+            glVertex3f(-1, -1, 0);
+            glVertex3f(1, -1, 0);
+        glEnd();
+        glEndList();
+
+        // unitCube (display list): Cube with vertices at (+-1, +-1, +-1).
+        GLuint unitCube = shapes+1;
+        glNewList(unitCube, GL_COMPILE);
+        glPushMatrix();
+          // Facing +X, -Z, -X, +Z.
+          for (int i = 0; i < 4; i++)
+          {
+              glRotatef(90, 0, 1, 0);
+              glPushMatrix();
+                glTranslatef(0, 0, 1);
+                glCallList(unitSquare);
+              glPopMatrix();
+          }
+          // Facing -Y.
+          glRotatef(90, 1, 0, 0);
+          glPushMatrix();
+            glTranslatef(0, 0, 1);
+            glCallList(unitSquare);
+          glPopMatrix();
+          // Facing +Y.
+          glRotatef(180, 1, 0, 0);
+          glTranslatef(0, 0, 1);
+          glCallList(unitSquare);
+        glPopMatrix();
+        glEndList();
+
+        // A scene with a ground plane and a floating cube.
+        glPushMatrix();
+          glScalef(20, 20, 1);
+          glCallList(unitSquare);
+        glPopMatrix();
+        glPushMatrix();
+          glTranslatef(-2, -3, 5);
+          glScalef(2, 2, 2);
+          glCallList(unitCube);
+        glPopMatrix();
+
+
+
+
+
+
    }
 };
 
