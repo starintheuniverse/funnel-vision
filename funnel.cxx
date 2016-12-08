@@ -163,7 +163,7 @@ vtkStandardNewMacro(vtk441MapperPart1);
 /*
  * mishii_PrintMatrix()
  *
- * Expects a matrix stored as in a linear array of floats.
+ * Expects a matrix stored column-major as in a linear array of floats.
  */
 
 void mishii_PrintMatrix(std::ostream &out, float *mat, int num_rows, int num_cols)
@@ -172,7 +172,7 @@ void mishii_PrintMatrix(std::ostream &out, float *mat, int num_rows, int num_col
     for (int row = 0; row < num_rows; row++)
     {
         for (int col = 0; col < num_cols; col++)
-            out << std::setw(8) << *(mat++) << " ";
+            out << std::setw(8) << mat[4*col + row] << " ";
         out << std::endl;
     }
 }
@@ -439,8 +439,15 @@ void KeypressCallbackFunction ( vtkObject* caller, long unsigned int vtkNotUsed(
  
   std::cout << "Pressed: " << iren->GetKeySym() << std::endl;
 
+    /* Disabled because doesn't work... */
+    /* Test: Show the camera transform matrices access. */
+    //float current_modelview[16];
+    //glGetFloatv(GL_MODELVIEW_MATRIX, current_modelview);
+    //std::cout << "------------------------------------------" << endl;
+    //mishii_PrintMatrix(std::cout, current_modelview, 4, 4);
+    //std::cout << "------------------------------------------" << endl;
 
-    /* Disabled... */
+    /* Disabled because doesn't work... */
     /* Test: Show the camera transform matrices access. */
     //vtkRenderer *ren = iren->FindPokedRenderer(1, 0); //Some dummy coordinates that hopefully land me near the right window.
     //ren->PrintSelf(std::cout, vtkIndent(2));
