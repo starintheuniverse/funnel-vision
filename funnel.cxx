@@ -155,6 +155,31 @@ vtkStandardNewMacro(vtk441MapperPart1);
 
 
 
+/* ------------------
+ * mishii helper code
+ * ------------------
+ */
+
+/*
+ * mishii_PrintMatrix()
+ *
+ * Expects a matrix stored as in a linear array of floats.
+ */
+
+void mishii_PrintMatrix(std::ostream &out, float *mat, int num_rows, int num_cols)
+{
+    out << std::fixed << std::setprecision(5);
+    for (int row = 0; row < num_rows; row++)
+    {
+        for (int col = 0; col < num_cols; col++)
+            out << std::setw(8) << *(mat++) << " ";
+        out << std::endl;
+    }
+}
+
+/* 000 */
+
+
 
 class vtk441MapperPart2 : public vtk441Mapper
 {
@@ -229,7 +254,11 @@ class vtk441MapperPart2 : public vtk441Mapper
         //...Some code
 
         // Render portal view: Transform view coordinates.
-        
+        float current_modelview[16];
+        glGetFloatv(GL_MODELVIEW_MATRIX, current_modelview);
+        std::cout << "------------------------------------------" << endl;
+        mishii_PrintMatrix(std::cout, current_modelview, 4, 4);
+        std::cout << "------------------------------------------" << endl;
 
    }
 };
@@ -392,8 +421,9 @@ int main()
   keypressCallback->SetCallback ( KeypressCallbackFunction );
   iren->AddObserver ( vtkCommand::KeyPressEvent, keypressCallback );
 
-  int timerId = iren->CreateRepeatingTimer(10);  // repeats every 10 microseconds <--> 0.01 seconds
-  std::cout << "timerId: " << timerId << std::endl;  
+  /* Disabled... */
+  //int timerId = iren->CreateRepeatingTimer(10);  // repeats every 10 microseconds <--> 0.01 seconds
+  //std::cout << "timerId: " << timerId << std::endl;  
  
   iren->Start();
 
@@ -408,6 +438,14 @@ void KeypressCallbackFunction ( vtkObject* caller, long unsigned int vtkNotUsed(
     static_cast<vtkRenderWindowInteractor*>(caller);
  
   std::cout << "Pressed: " << iren->GetKeySym() << std::endl;
+
+
+    /* Disabled... */
+    /* Test: Show the camera transform matrices access. */
+    //vtkRenderer *ren = iren->FindPokedRenderer(1, 0); //Some dummy coordinates that hopefully land me near the right window.
+    //ren->PrintSelf(std::cout, vtkIndent(2));
+    //vtkCamera *camera = ren->GetActiveCamera();
+    //camera->PrintSelf(std::cout, vtkIndent(2));
 }
 
 
