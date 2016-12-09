@@ -65,6 +65,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <list>
+
 
 class vtk441Mapper;
 
@@ -74,20 +76,23 @@ class vtk441Mapper : public vtkOpenGLPolyDataMapper
   protected:
    GLuint displayList;
    bool   initialized;
-   float  size;
+   float  animTime;
 
   public:
    vtk441Mapper()
    {
      initialized = false;
-     size = 1;
+     animTime = 0.0;
    }
     
-   void   IncrementSize()
+   virtual void AdvanceAnimation()
    {
-       size += 0.01;
-       if (size > 2.0)
-           size = 1.0;
+       animTime += 0.001;
+       if (animTime >= 2.0)
+           animTime = 0.0;
+
+       //DEBUG
+       //std::cerr << animTime << std::endl;
    }
 
    void
@@ -174,10 +179,10 @@ class Mesh
  */
 class MeshObject
 {
-  protected:
+  public:
     glm::mat4 modelMat;
     Mesh *mesh;
-  public:
+
     MeshObject(Mesh *mesh, glm::mat4 modelMat = glm::mat4(1.0))
             : mesh(mesh), modelMat(modelMat) {}
     virtual ~MeshObject() {};
@@ -226,8 +231,10 @@ class vtk441MapperMishii : public vtk441Mapper
     GLuint shapes; // Display lists.
     bool   initialized;
 
-    DisplayListMesh *squareMesh, *cubeMesh;
-    MeshObject *squareObj, *cubeObj;
+    std::list<DisplayListMesh *> meshes;
+    std::list<MeshObject *> meshObjects;
+
+    MeshObject *animationTarget;
 
   public:
     static vtk441MapperMishii *New();
@@ -235,18 +242,19 @@ class vtk441MapperMishii : public vtk441Mapper
     vtk441MapperMishii()
     {
       initialized = false;
+      animationTarget = NULL;
     }
 
    ~vtk441MapperMishii()
     {
-        if (squareMesh != NULL)
-           delete squareMesh;
-        if (cubeMesh != NULL)
-           delete cubeMesh;
-        if (squareObj != NULL)
-           delete squareObj;
-        if (cubeObj != NULL)
-           delete cubeObj;
+        for (std::list<MeshObject *>::iterator iter = meshObjects.begin();
+                iter != meshObjects.end();
+                ++iter)
+            delete *iter;
+        for (std::list<DisplayListMesh *>::iterator iter = meshes.begin();
+                iter != meshes.end();
+                ++iter)
+            delete *iter;
     }
 
   protected:
@@ -292,8 +300,10 @@ class vtk441MapperMishii : public vtk441Mapper
         glEndList();
 
         // Reidentify the above shapes as "display list meshes".
-        squareMesh = new DisplayListMesh(unitSquare);
-        cubeMesh = new DisplayListMesh(unitCube);
+        DisplayListMesh *squareMesh = new DisplayListMesh(unitSquare);
+        DisplayListMesh *cubeMesh = new DisplayListMesh(unitCube);
+        meshes.push_back(squareMesh);
+        meshes.push_back(cubeMesh);
  
         // Disabled...
         // Mess with the modelview matrix prior to rendering some things.
@@ -309,9 +319,13 @@ class vtk441MapperMishii : public vtk441Mapper
         using namespace glm_mishii_matrix_transforms;
 
         // A scene with a ground plane and a floating cube.
-        squareObj = new MeshObject(squareMesh, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
-        cubeObj = new MeshObject(cubeMesh, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
-                                           * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
+        MeshObject *squareObj = new MeshObject(squareMesh, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
+        MeshObject *cubeObj = new MeshObject(cubeMesh, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
+                                                       * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
+
+        meshObjects.push_back(squareObj);
+        meshObjects.push_back(cubeObj);
+        animationTarget = cubeObj;
 
         // This function has done its job.
         initialized = true;
@@ -326,13 +340,24 @@ class vtk441MapperMishii : public vtk441Mapper
         if (!initialized)
             InitializeScene();
 
-        squareObj->Draw();
-        cubeObj->Draw();
+        for (std::list<MeshObject *>::iterator iter = meshObjects.begin();
+                iter != meshObjects.end();
+                ++iter)
+            (*iter)->Draw();
 
         // Source portal: Use silhouette to refine the stencil buffer.
         //...Some code
 
         // Render portal view: Transform view coordinates.
+   }
+
+   virtual void AdvanceAnimation()
+   {
+       animTime += 0.01;
+       if (animTime >= 2.0)
+           animTime = 0.0;
+       if (animationTarget != NULL)
+           animationTarget->modelMat[3][2] = 3.0 + 2.0*animTime;
    }
 };
 
@@ -375,22 +400,7 @@ class vtkTimerCallback : public vtkCommand
 
       // Make a call to the mapper to make it alter how it renders...
       if (mapper != NULL)
-            mapper->IncrementSize();
-      //mishii-note: Here is where I could animate a uniform for some shaders...
-
-      // Modify the camera...
-      if (cam != NULL)
-      {
-         cam->SetFocalPoint(0,0,0);
-         float rads = angle/360.0*2*3.14;
-         cam->SetPosition(70*cos(rads),0,70*sin(rads));
-         angle++;
-         if (angle > 360)
-            angle = 0;
-         cam->SetViewUp(0,1,0);
-         cam->SetClippingRange(20, 120);
-         cam->SetDistance(70);
-      }
+            mapper->AdvanceAnimation();
 
       // Force a render...
       if (renWin != NULL)
@@ -478,9 +488,8 @@ int main()
   keypressCallback->SetCallback ( KeypressCallbackFunction );
   iren->AddObserver ( vtkCommand::KeyPressEvent, keypressCallback );
 
-  /* Disabled... */
-  //int timerId = iren->CreateRepeatingTimer(10);  // repeats every 10 microseconds <--> 0.01 seconds
-  //std::cout << "timerId: " << timerId << std::endl;  
+  int timerId = iren->CreateRepeatingTimer(10);  // repeats every 10 milliseconds <--> 0.01 seconds
+  std::cout << "timerId: " << timerId << std::endl;  
  
   iren->Start();
 
