@@ -126,17 +126,12 @@ class vtk441Mapper : public vtkOpenGLPolyDataMapper
 };
 
 
-/* ------------------
- * mishii helper code
- * ------------------
- */
-
-/*
- * mishii_PrintMatrix()
+/* ------------------------------------------------------------------
+ * Utility routine: mishii_PrintMatrix().
  *
  * Expects a matrix stored column-major as in a linear array of floats.
+ * ------------------------------------------------------------------
  */
-
 void mishii_PrintMatrix(std::ostream &out, const float *mat, int num_rows, int num_cols)
 {
     out << std::fixed << std::setprecision(5);
@@ -148,6 +143,10 @@ void mishii_PrintMatrix(std::ostream &out, const float *mat, int num_rows, int n
     }
 }
 
+/* ------------------------------------------------------------------
+ * Convenience namepace: glm_mishii_matrix_transforms.
+ * ------------------------------------------------------------------
+ */
 namespace glm_mishii_matrix_transforms
 {
     using glm::mat4;
@@ -158,22 +157,9 @@ namespace glm_mishii_matrix_transforms
 }
 
 
-/* ----------------------
- * Custom type hierarchy.
- * ----------------------
- */
-
-
-/* Convenience */
-const GLfloat identity4x4[16] =
-        {1, 0, 0, 0,
-         0, 1, 0, 0,
-         0, 0, 1, 0,
-         0, 0, 0, 1};
-
-
-/*
+/* ------------------------------------------------------------------
  * Mesh class.
+ * ------------------------------------------------------------------
  */
 class Mesh
 {
@@ -182,8 +168,9 @@ class Mesh
 };
 
 
-/*
+/* ------------------------------------------------------------------
  * MeshObject class.
+ * ------------------------------------------------------------------
  */
 class MeshObject
 {
@@ -206,14 +193,17 @@ void MeshObject::Draw()
 }
 
 
-/*
+/* ----------------
  * PolygonMesh TBA.
+ * ----------------
  */
 
-/*
+
+/* ------------------------------------------------------------------
  * DisplayListMesh class.
  *
  * Wrapper around a OpenGL display list reference.
+ * ------------------------------------------------------------------
  */
 class DisplayListMesh : public Mesh
 {
@@ -226,35 +216,43 @@ class DisplayListMesh : public Mesh
 };
 
 
-
-
-/*               000 mishii                */
-/* --------------------------------------- */
-
-
-
+/* ------------------------------------------------------------------
+ * vtk441MapperMishii class.
+ * ------------------------------------------------------------------
+ */
 class vtk441MapperMishii : public vtk441Mapper
 {
- protected:
-   GLuint displayList;
-   bool   initialized;
+  protected:
+    GLuint shapes; // Display lists.
+    bool   initialized;
 
- public:
-   static vtk441MapperMishii *New();
+    DisplayListMesh *squareMesh, *cubeMesh;
+    MeshObject *squareObj, *cubeObj;
 
-   vtk441MapperMishii()
-   {
-     initialized = false;
-   }
+  public:
+    static vtk441MapperMishii *New();
 
-    //TODO: move static mesh/scene data to neighbor of initializer.
+    vtk441MapperMishii()
+    {
+      initialized = false;
+    }
 
-   virtual void RenderPiece(vtkRenderer *ren, vtkActor *act)
-   {
-       RemoveVTKOpenGLStateSideEffects();
-       SetupLight();
+   ~vtk441MapperMishii()
+    {
+        if (squareMesh != NULL)
+           delete squareMesh;
+        if (cubeMesh != NULL)
+           delete cubeMesh;
+        if (squareObj != NULL)
+           delete squareObj;
+        if (cubeObj != NULL)
+           delete cubeObj;
+    }
 
-        GLuint shapes = glGenLists(2);
+  protected:
+    void InitializeScene()
+    {
+        shapes = glGenLists(2);
 
         // unitSquare (display list): Square with vertices at (+-1, +-1, 0).
         GLuint unitSquare = shapes+0;
@@ -294,9 +292,9 @@ class vtk441MapperMishii : public vtk441Mapper
         glEndList();
 
         // Reidentify the above shapes as "display list meshes".
-        DisplayListMesh unitSquareData(unitSquare);
-        DisplayListMesh unitCubeData(unitCube);
-
+        squareMesh = new DisplayListMesh(unitSquare);
+        cubeMesh = new DisplayListMesh(unitCube);
+ 
         // Disabled...
         // Mess with the modelview matrix prior to rendering some things.
         //float retrieved_modelview[16];
@@ -307,16 +305,29 @@ class vtk441MapperMishii : public vtk441Mapper
         //mishii_PrintMatrix(std::cout, retrieved_modelview, 4, 4);
         //std::cout << "------------------------------------------" << endl;
 
-        // For succinct expressions employing glm matrices.
+        // To make glm matrix expressions succinct.
         using namespace glm_mishii_matrix_transforms;
 
         // A scene with a ground plane and a floating cube.
-        MeshObject squareObj(&unitSquareData, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
-        MeshObject cubeObj(&unitCubeData, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
-                                          * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
-        squareObj.Draw();
-        cubeObj.Draw();
+        squareObj = new MeshObject(squareMesh, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
+        cubeObj = new MeshObject(cubeMesh, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
+                                           * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
 
+        // This function has done its job.
+        initialized = true;
+    }
+
+  public:
+    virtual void RenderPiece(vtkRenderer *ren, vtkActor *act)
+    {
+        RemoveVTKOpenGLStateSideEffects();
+        SetupLight();
+
+        if (!initialized)
+            InitializeScene();
+
+        squareObj->Draw();
+        cubeObj->Draw();
 
         // Source portal: Use silhouette to refine the stencil buffer.
         //...Some code
@@ -327,6 +338,7 @@ class vtk441MapperMishii : public vtk441Mapper
 
 vtkStandardNewMacro(vtk441MapperMishii);
 
+// -------------------------------------------------------------------
 
 
 
