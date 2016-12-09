@@ -163,6 +163,17 @@ namespace glm_mishii_matrix_transforms
 
 
 /* ------------------------------------------------------------------
+ * Class forward declarations.
+ * ------------------------------------------------------------------
+ */
+class Mesh;
+class MeshObject;
+class PortalObject;
+class DisplayListMesh;
+typedef std::list<MeshObject *> MeshObjList;
+
+
+/* ------------------------------------------------------------------
  * Mesh class.
  * ------------------------------------------------------------------
  */
@@ -186,16 +197,36 @@ class MeshObject
     MeshObject(Mesh *mesh, glm::mat4 modelMat = glm::mat4(1.0))
             : mesh(mesh), modelMat(modelMat) {}
     virtual ~MeshObject() {};
-    virtual void Draw();
+    virtual void Draw()
+    {
+        glPushMatrix();
+          glMultMatrixf(glm::value_ptr(modelMat));
+          mesh->Draw();
+        glPopMatrix();
+    }
+
+    static void DrawList(MeshObjList &l)
+    {
+        for (MeshObjList::iterator iter = l.begin(); iter != l.end(); ++iter)
+            (*iter)->Draw();
+    }
 };
 
-void MeshObject::Draw()
+
+/* ------------------------------------------------------------------
+ * PortalObject class.
+ * ------------------------------------------------------------------
+ */
+class PortalObject : public MeshObject
 {
-    glPushMatrix();
-      glMultMatrixf(glm::value_ptr(modelMat));
-      mesh->Draw();
-    glPopMatrix();
-}
+  public:
+    MeshObjList *parentScene;
+    PortalObject *destPortal;
+
+    PortalObject(Mesh *mesh, MeshObjList *scene, PortalObject *portal,
+            glm::mat4 modelMat = glm::mat4(1.0))
+            : MeshObject(mesh, modelMat), parentScene(scene), destPortal(portal) {}
+};
 
 
 /* ----------------
@@ -340,10 +371,7 @@ class vtk441MapperMishii : public vtk441Mapper
         if (!initialized)
             InitializeScene();
 
-        for (std::list<MeshObject *>::iterator iter = meshObjects.begin();
-                iter != meshObjects.end();
-                ++iter)
-            (*iter)->Draw();
+        MeshObject::DrawList(meshObjects);
 
         // Source portal: Use silhouette to refine the stencil buffer.
         //...Some code
