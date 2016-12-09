@@ -191,13 +191,15 @@ class Mesh
 class MeshObject
 {
   public:
+    static const int MAX_SCENE_RECURSION = 2;
     glm::mat4 modelMat;
     Mesh *mesh;
 
     MeshObject(Mesh *mesh, glm::mat4 modelMat = glm::mat4(1.0))
             : mesh(mesh), modelMat(modelMat) {}
     virtual ~MeshObject() {};
-    virtual void Draw()
+    virtual void Draw(int recursion_levels_left = MAX_SCENE_RECURSION) const
+    //void Draw(int recursion_levels_left = MAX_SCENE_RECURSION) const   // DEBUG hack: switch these to enable/disable portals.
     {
         glPushMatrix();
           glMultMatrixf(glm::value_ptr(modelMat));
@@ -205,10 +207,12 @@ class MeshObject
         glPopMatrix();
     }
 
-    static void DrawList(MeshObjList &l)
+    static void DrawList(MeshObjList &l, int recursion_levels_left = MAX_SCENE_RECURSION)
     {
+        if (recursion_levels_left <= 0)
+            return;
         for (MeshObjList::iterator iter = l.begin(); iter != l.end(); ++iter)
-            (*iter)->Draw();
+            (*iter)->Draw(recursion_levels_left);
     }
 };
 
@@ -231,11 +235,63 @@ class PortalObject : public MeshObject
 
     void SetDestPortal(PortalObject *portal) { destPortal = portal; }
 
-    virtual void Draw()
+    virtual void Draw(int recursion_levels_left = MeshObject::MAX_SCENE_RECURSION) const
     {
-        /* Magic */
-        MeshObject::Draw();
-        /* Magic */
+        if (destPortal != NULL && destPortal->parentScene != NULL)
+        {
+            // Use the stencil buffer. Initialize to 255's.
+            //TODO: get former status of GL_STENCIL_TEST to restore it at the end of this call.
+            glEnable(GL_STENCIL_TEST);
+
+            // Correct value of the stencil buffer for fragments from this portal's neighborhood.
+            int stencil_ref = 255 + recursion_levels_left - MeshObject::MAX_SCENE_RECURSION;
+            //int old_stencil_ref;
+            //glGetIntegerv(GL_STENCIL_REF, &old_stencil_ref);
+
+            // Paint the portal surface into just the stencil buffer.
+            //TODO: save the former "depth configuration".
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+            glDepthMask(GL_FALSE);
+            glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
+            MeshObject::Draw(recursion_levels_left);
+            glDepthMask(GL_TRUE);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+            // Disable drawing into the stencil buffer, but still read from it.
+            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+            // Get the view from destPortal.
+            float matrixBuffer[16];
+            glm::mat4 C1, C2;
+            glm::mat4 aboutFace = glm::scale(glm::mat4(), glm::vec3(-1.0f, 1.0f, -1.0f));
+            glGetFloatv(GL_MODELVIEW_MATRIX, matrixBuffer);
+            C1 = glm::make_mat4(matrixBuffer);
+            C2 = C1 * modelMat * aboutFace * glm::inverse(destPortal->modelMat);
+
+            //TODO: Some way to trick the depth buffer to not render anything behind destPortal.
+            
+            // Re-render the scene normally from the destPortal view.
+            glPushMatrix();
+              glLoadMatrixf(glm::value_ptr(C2));
+              MeshObject::DrawList(*(destPortal->parentScene), recursion_levels_left - 1);
+            glPopMatrix();
+
+            // Paint the portal surface into just the depth buffer.
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+            glDepthMask(GL_TRUE);
+            MeshObject::Draw(recursion_levels_left);
+
+            //TODO: restore the old value of stencil test, depth, color.
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            //glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);
+            glDisable(GL_STENCIL_TEST);
+        }
+        else
+        {
+            // A deactivated portal is a plain old MeshObject.
+            MeshObject::Draw(recursion_levels_left);
+        }
     }
 };
 
@@ -302,6 +358,17 @@ class vtk441MapperMishii : public vtk441Mapper
   protected:
     void InitializeScene()
     {
+
+        // Add a stencil buffer to the framebuffer.
+/*
+        GLuint texture;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        //Hack; don't change window size or things will break.
+        glTexImage2D(GL_TEXTURE_2D, 0, 1, 1200, 600, 0, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, NULL);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, texture, 0);
+*/
+
         shapes = glGenLists(2);
 
         // unitSquare (display list): Square with vertices at (+-1, +-1, 0).
@@ -408,22 +475,27 @@ class vtk441MapperMishii : public vtk441Mapper
         SetupLight();
 
         glEnable(GL_COLOR_MATERIAL);
+        glEnable(GL_CULL_FACE);
+
+            //TODO: is this necessary?
+        // Initialize the stencil buffer.
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_NEVER, 255, 0xFF);
+        glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+        glStencilMask(0xFF);
+        glClear(GL_STENCIL_BUFFER_BIT);
+        glDisable(GL_STENCIL_TEST);
 
         if (!initialized)
             InitializeScene();
 
         MeshObject::DrawList(meshObjects);
-
-        // Source portal: Use silhouette to refine the stencil buffer.
-        //...Some code
-
-        // Render portal view: Transform view coordinates.
    }
 
    virtual void AdvanceAnimation()
    {
        animTime += 0.01;
-       if (animTime >= 2.0)
+       if (animTime >= 3.0)
            animTime = 0.0;
        if (animationTarget != NULL)
            animationTarget->modelMat[3][2] = 3.0 + 2.0*animTime;
