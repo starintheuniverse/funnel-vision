@@ -215,6 +215,8 @@ class MeshObject
 
 /* ------------------------------------------------------------------
  * PortalObject class.
+ *
+ * Rays go into the +Z side and come out of the +Z side.
  * ------------------------------------------------------------------
  */
 class PortalObject : public MeshObject
@@ -223,9 +225,18 @@ class PortalObject : public MeshObject
     MeshObjList *parentScene;
     PortalObject *destPortal;
 
-    PortalObject(Mesh *mesh, MeshObjList *scene, PortalObject *portal,
+    PortalObject(Mesh *mesh, MeshObjList *scene, PortalObject *portal = NULL,
             glm::mat4 modelMat = glm::mat4(1.0))
             : MeshObject(mesh, modelMat), parentScene(scene), destPortal(portal) {}
+
+    void SetDestPortal(PortalObject *portal) { destPortal = portal; }
+
+    virtual void Draw()
+    {
+        /* Magic */
+        MeshObject::Draw();
+        /* Magic */
+    }
 };
 
 
@@ -304,6 +315,14 @@ class vtk441MapperMishii : public vtk441Mapper
         glEnd();
         glEndList();
 
+        // Colors for cube faces.
+        float colors[] = {0.6f, 0.0f, 0.6f,
+                          0.0f, 1.0f, 1.0f,
+                          1.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 1.0f,
+                          0.0f, 0.45f, 0.0f,
+                          0.95f, 0.95f, 0.0f};
+
         // unitCube (display list): Cube with vertices at (+-1, +-1, +-1).
         GLuint unitCube = shapes+1;
         glNewList(unitCube, GL_COMPILE);
@@ -314,6 +333,7 @@ class vtk441MapperMishii : public vtk441Mapper
               glRotatef(90, 0, 1, 0);
               glPushMatrix();
                 glTranslatef(0, 0, 1);
+                glColor3fv(colors + 3*i);
                 glCallList(unitSquare);
               glPopMatrix();
           }
@@ -321,11 +341,13 @@ class vtk441MapperMishii : public vtk441Mapper
           glRotatef(90, 1, 0, 0);
           glPushMatrix();
             glTranslatef(0, 0, 1);
+            glColor3fv(colors + 3*4);
             glCallList(unitSquare);
           glPopMatrix();
           // Facing +Y.
           glRotatef(180, 1, 0, 0);
           glTranslatef(0, 0, 1);
+          glColor3fv(colors + 3*5);
           glCallList(unitSquare);
         glPopMatrix();
         glEndList();
@@ -349,13 +371,30 @@ class vtk441MapperMishii : public vtk441Mapper
         // To make glm matrix expressions succinct.
         using namespace glm_mishii_matrix_transforms;
 
-        // A scene with a ground plane and a floating cube.
+        // A scene with a ground plane, a floating cube, and a portal.
         MeshObject *squareObj = new MeshObject(squareMesh, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
-        MeshObject *cubeObj = new MeshObject(cubeMesh, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
-                                                       * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
+        MeshObject *cubeObj = new MeshObject(cubeMesh,
+                translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
+                * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
+
+        float d45 = atan(1);
+
+        PortalObject *portal1 = new PortalObject(squareMesh, &meshObjects, NULL,
+                translate(mat4(), vec3(5.0f, 2.0f, 3.0f))
+                * rotate(mat4(), d45, vec3(1.0f, 0.0f, 0.0f))
+                * scale(mat4(), vec3(3.0f, 3.0f, 1.0f)));
+        PortalObject *portal2 = new PortalObject(squareMesh, &meshObjects, NULL,
+                translate(mat4(), vec3(-5.5f, -3.0f, 5.0f))
+                * rotate(mat4(), 2*d45, vec3(0.0f, 1.0f, 0.0f))
+                * rotate(mat4(), 2*d45, vec3(0.0f, 0.0f, 1.0f))
+                * scale(mat4(), vec3(3.0f, 3.0f, 1.0f)));
+        portal1->SetDestPortal(portal2);
+        portal2->SetDestPortal(portal1);
 
         meshObjects.push_back(squareObj);
         meshObjects.push_back(cubeObj);
+        meshObjects.push_back(portal1);
+        meshObjects.push_back(portal2);
         animationTarget = cubeObj;
 
         // This function has done its job.
@@ -367,6 +406,8 @@ class vtk441MapperMishii : public vtk441Mapper
     {
         RemoveVTKOpenGLStateSideEffects();
         SetupLight();
+
+        glEnable(GL_COLOR_MATERIAL);
 
         if (!initialized)
             InitializeScene();
