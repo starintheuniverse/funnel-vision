@@ -11,6 +11,7 @@
  *
  * Attributions:
  *   > Interactor and mapper derived from examples by Hank Childs.
+ *   > glm usage derived from the glm docs at <glm.g-truc.net>.
  *   > Other source code used as provided by Hank Childs, presumably derivative
  *     of Kitware coders K.Martin, W.Schroeder, and B.Lorensen.
  * =============================================================================
@@ -59,6 +60,10 @@
 #include <vtkFloatArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkCellArray.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 class vtk441Mapper;
@@ -166,7 +171,7 @@ vtkStandardNewMacro(vtk441MapperPart1);
  * Expects a matrix stored column-major as in a linear array of floats.
  */
 
-void mishii_PrintMatrix(std::ostream &out, float *mat, int num_rows, int num_cols)
+void mishii_PrintMatrix(std::ostream &out, const float *mat, int num_rows, int num_cols)
 {
     out << std::fixed << std::setprecision(5);
     for (int row = 0; row < num_rows; row++)
@@ -177,7 +182,88 @@ void mishii_PrintMatrix(std::ostream &out, float *mat, int num_rows, int num_col
     }
 }
 
-/* 000 */
+namespace glm_mishii_matrix_transforms
+{
+    using glm::mat4;
+    using glm::vec3;
+    using glm::scale;
+    using glm::scale;
+    using glm::translate;
+}
+
+
+/* ---------------
+ * Type hierarchy.
+ * ---------------
+ */
+
+
+/* Convenience */
+const GLfloat identity4x4[16] =
+        {1, 0, 0, 0,
+         0, 1, 0, 0,
+         0, 0, 1, 0,
+         0, 0, 0, 1};
+
+
+/*
+ * Mesh class.
+ */
+class Mesh
+{
+  public:
+    virtual void Draw() = 0;
+};
+
+
+/*
+ * MeshObject class.
+ */
+class MeshObject
+{
+  protected:
+    glm::mat4 modelMat;
+    Mesh *mesh;
+  public:
+    MeshObject(Mesh *mesh, glm::mat4 modelMat = glm::mat4(1.0))
+            : mesh(mesh), modelMat(modelMat) {}
+    virtual ~MeshObject() {};
+    virtual void Draw();
+};
+
+void MeshObject::Draw()
+{
+    glPushMatrix();
+      glMultMatrixf(glm::value_ptr(modelMat));
+      mesh->Draw();
+    glPopMatrix();
+}
+
+
+/*
+ * PolygonMesh TBA.
+ */
+
+/*
+ * DisplayListMesh class.
+ *
+ * Wrapper around a OpenGL display list reference.
+ */
+class DisplayListMesh : public Mesh
+{
+  protected:
+    GLuint displayList;
+  public:
+    DisplayListMesh(GLuint displayList) : displayList(displayList) {}
+    virtual ~DisplayListMesh() {}
+    void Draw() { glCallList(displayList); }
+};
+
+
+
+
+/*               000 mishii                */
+/* --------------------------------------- */
 
 
 
@@ -238,28 +324,35 @@ class vtk441MapperPart2 : public vtk441Mapper
         glPopMatrix();
         glEndList();
 
+        // Reidentify the above shapes as "display list meshes".
+        DisplayListMesh unitSquareData(unitSquare);
+        DisplayListMesh unitCubeData(unitCube);
+
+        // Disabled...
+        // Mess with the modelview matrix prior to rendering some things.
+        //float retrieved_modelview[16];
+        //glGetFloatv(GL_MODELVIEW_MATRIX, retrieved_modelview);
+        //retrieved_modelview[3*4 + 2] /= 2;
+        //glLoadMatrixf(retrieved_modelview);
+        //std::cout << "------------------------------------------" << endl;
+        //mishii_PrintMatrix(std::cout, retrieved_modelview, 4, 4);
+        //std::cout << "------------------------------------------" << endl;
+
+        // For succinct expressions employing glm matrices.
+        using namespace glm_mishii_matrix_transforms;
+
         // A scene with a ground plane and a floating cube.
-        glPushMatrix();
-          glScalef(20, 20, 1);
-          glCallList(unitSquare);
-        glPopMatrix();
-        glPushMatrix();
-          glTranslatef(-2, -3, 5);
-          glScalef(2, 2, 2);
-          glCallList(unitCube);
-        glPopMatrix();
+        MeshObject squareObj(&unitSquareData, scale(mat4(), vec3(20.0f, 20.0f, 1.0f)));
+        MeshObject cubeObj(&unitCubeData, translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
+                                          * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
+        squareObj.Draw();
+        cubeObj.Draw();
 
 
         // Source portal: Use silhouette to refine the stencil buffer.
         //...Some code
 
         // Render portal view: Transform view coordinates.
-        float current_modelview[16];
-        glGetFloatv(GL_MODELVIEW_MATRIX, current_modelview);
-        std::cout << "------------------------------------------" << endl;
-        mishii_PrintMatrix(std::cout, current_modelview, 4, 4);
-        std::cout << "------------------------------------------" << endl;
-
    }
 };
 
