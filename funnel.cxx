@@ -69,17 +69,6 @@
 class vtk441Mapper;
 
 
-class Triangle
-{
-  public:
-      double         X[3];
-      double         Y[3];
-      double         Z[3];
-      double         fieldValue[3]; // always between 0 and 1
-      double         normals[3][3];
-};
-
-
 class vtk441Mapper : public vtkOpenGLPolyDataMapper
 {
   protected:
@@ -136,29 +125,6 @@ class vtk441Mapper : public vtkOpenGLPolyDataMapper
    }
 };
 
-class vtk441MapperPart1 : public vtk441Mapper
-{
- public:
-   static vtk441MapperPart1 *New();
-   
-   virtual void RenderPiece(vtkRenderer *ren, vtkActor *act)
-   {
-
-      /* This is a separate scene from part 2, which is static. */
-
-      RemoveVTKOpenGLStateSideEffects();
-      SetupLight();
-      glBegin(GL_TRIANGLES);
-      glVertex3f(-10*size, -10*size, -10*size);
-      glVertex3f(10*size, -10*size, 10*size);
-      glVertex3f(10*size, 10*size, 10*size);
-      glEnd();
-   }
-};
-
-vtkStandardNewMacro(vtk441MapperPart1);
-
-
 
 /* ------------------
  * mishii helper code
@@ -192,9 +158,9 @@ namespace glm_mishii_matrix_transforms
 }
 
 
-/* ---------------
- * Type hierarchy.
- * ---------------
+/* ----------------------
+ * Custom type hierarchy.
+ * ----------------------
  */
 
 
@@ -267,23 +233,26 @@ class DisplayListMesh : public Mesh
 
 
 
-class vtk441MapperPart2 : public vtk441Mapper
+class vtk441MapperMishii : public vtk441Mapper
 {
- public:
-   static vtk441MapperPart2 *New();
-   
+ protected:
    GLuint displayList;
    bool   initialized;
 
-   vtk441MapperPart2()
+ public:
+   static vtk441MapperMishii *New();
+
+   vtk441MapperMishii()
    {
      initialized = false;
    }
+
+    //TODO: move static mesh/scene data to neighbor of initializer.
+
    virtual void RenderPiece(vtkRenderer *ren, vtkActor *act)
    {
        RemoveVTKOpenGLStateSideEffects();
        SetupLight();
-
 
         GLuint shapes = glGenLists(2);
 
@@ -356,7 +325,11 @@ class vtk441MapperPart2 : public vtk441Mapper
    }
 };
 
-vtkStandardNewMacro(vtk441MapperPart2);
+vtkStandardNewMacro(vtk441MapperMishii);
+
+
+
+
 
 class vtkTimerCallback : public vtkCommand
 {
@@ -391,6 +364,7 @@ class vtkTimerCallback : public vtkCommand
       // Make a call to the mapper to make it alter how it renders...
       if (mapper != NULL)
             mapper->IncrementSize();
+      //mishii-note: Here is where I could animate a uniform for some shaders...
 
       // Modify the camera...
       if (cam != NULL)
@@ -439,62 +413,40 @@ int main()
   // library. It may also do color mapping, if scalars or other attributes
   // are defined. 
   //
-  vtkSmartPointer<vtk441MapperPart1> win1Mapper =
-    vtkSmartPointer<vtk441MapperPart1>::New();
-  win1Mapper->SetInputConnection(sphere->GetOutputPort());
 
-  vtkSmartPointer<vtkActor> win1Actor =
+  vtkSmartPointer<vtk441MapperMishii> winMapper =
+    vtkSmartPointer<vtk441MapperMishii>::New();
+  winMapper->SetInputConnection(sphere->GetOutputPort());
+
+  vtkSmartPointer<vtkActor> winActor =
     vtkSmartPointer<vtkActor>::New();
-  win1Actor->SetMapper(win1Mapper);
+  winActor->SetMapper(winMapper);
 
-  vtkSmartPointer<vtkRenderer> ren1 =
-    vtkSmartPointer<vtkRenderer>::New();
-
-  vtkSmartPointer<vtk441MapperPart2> win2Mapper =
-    vtkSmartPointer<vtk441MapperPart2>::New();
-  win2Mapper->SetInputConnection(sphere->GetOutputPort());
-
-  vtkSmartPointer<vtkActor> win2Actor =
-    vtkSmartPointer<vtkActor>::New();
-  win2Actor->SetMapper(win2Mapper);
-
-  vtkSmartPointer<vtkRenderer> ren2 =
+  vtkSmartPointer<vtkRenderer> ren =
     vtkSmartPointer<vtkRenderer>::New();
 
   vtkSmartPointer<vtkRenderWindow> renWin =
     vtkSmartPointer<vtkRenderWindow>::New();
-  renWin->AddRenderer(ren1);
-  ren1->SetViewport(0, 0, 0.5, 1);
-  renWin->AddRenderer(ren2);
-  ren2->SetViewport(0.5, 0, 1.0, 1);
+  renWin->AddRenderer(ren);
+  ren->SetViewport(0.0, 0.0, 1.0, 1);
 
   vtkSmartPointer<vtkRenderWindowInteractor> iren =
     vtkSmartPointer<vtkRenderWindowInteractor>::New();
   iren->SetRenderWindow(renWin);
 
-  // Add the actors to the renderer, set the background and size.
+  // Add the actor(s) to the renderer, set the background and size.
   //
-  bool doWindow1 = false;
-  if (doWindow1)
-     ren1->AddActor(win1Actor);
-  ren1->SetBackground(0.0, 0.0, 0.0);
-  bool doWindow2 = true;
-  if (doWindow2)
-      ren2->AddActor(win2Actor);
-  ren2->SetBackground(0.0, 0.0, 0.0);
+  ren->AddActor(winActor);
+  ren->SetBackground(0.0, 0.0, 0.0);
   renWin->SetSize(1200, 600);
 
   // Set up the lighting.
   //
-  vtkRenderer *rens[2] = { ren1, ren2 };
-  for (int i = 0 ; i < 2 ; i++)
-  {
-     rens[i]->GetActiveCamera()->SetFocalPoint(0,0,0);
-     rens[i]->GetActiveCamera()->SetPosition(0,0,70);
-     rens[i]->GetActiveCamera()->SetViewUp(0,1,0);
-     rens[i]->GetActiveCamera()->SetClippingRange(20, 120);
-     rens[i]->GetActiveCamera()->SetDistance(70);
-  }
+     ren->GetActiveCamera()->SetFocalPoint(0,0,0);
+     ren->GetActiveCamera()->SetPosition(0,0,70);
+     ren->GetActiveCamera()->SetViewUp(0,1,0);
+     ren->GetActiveCamera()->SetClippingRange(20, 120);
+     ren->GetActiveCamera()->SetDistance(70);
   
   // This starts the event loop and invokes an initial render.
   //
@@ -505,9 +457,9 @@ int main()
   vtkSmartPointer<vtkTimerCallback> cb = 
     vtkSmartPointer<vtkTimerCallback>::New();
   iren->AddObserver(vtkCommand::TimerEvent, cb);
-  cb->SetMapper(win1Mapper);
+  cb->SetMapper(winMapper);
   cb->SetRenderWindow(renWin);
-  cb->SetCamera(ren1->GetActiveCamera());
+  cb->SetCamera(ren->GetActiveCamera());
  
   vtkSmartPointer<vtkCallbackCommand> keypressCallback = 
     vtkSmartPointer<vtkCallbackCommand>::New();
