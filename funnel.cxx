@@ -3,7 +3,7 @@
  * funnel.cxx
  * Masado Ishii
  * CIS 441 "Intro Comp. Graphics" (H.Childs)
- * 2016-12-09
+ * 2016-12-13
  *
  * Description:
  *   My final project, "FunnelVision," to simulate portal-like visual effects
@@ -191,7 +191,7 @@ class Mesh
 class MeshObject
 {
   public:
-    static const int MAX_SCENE_RECURSION = 2;
+    static const int MAX_SCENE_RECURSION = 3;
     glm::mat4 modelMat;
     Mesh *mesh;
 
@@ -239,26 +239,26 @@ class PortalObject : public MeshObject
     {
         if (destPortal != NULL && destPortal->parentScene != NULL)
         {
-            // Use the stencil buffer. Initialize to 255's.
-            //TODO: get former status of GL_STENCIL_TEST to restore it at the end of this call.
-            glEnable(GL_STENCIL_TEST);
+                // CAUTION: There may be inconsistency with how stencil_ref is being used.
 
             // Correct value of the stencil buffer for fragments from this portal's neighborhood.
             int stencil_ref = 255 + recursion_levels_left - MeshObject::MAX_SCENE_RECURSION;
-            //int old_stencil_ref;
-            //glGetIntegerv(GL_STENCIL_REF, &old_stencil_ref);
+            int old_stencil_ref;
+            glGetIntegerv(GL_STENCIL_REF, &old_stencil_ref);
 
             // Paint the portal surface into just the stencil buffer.
             //TODO: save the former "depth configuration".
             glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
             glDepthMask(GL_FALSE);
-            glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
+            //glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
+            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);  // Only if portal is viewable.
             glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
             MeshObject::Draw(recursion_levels_left);
             glDepthMask(GL_TRUE);
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-            // Disable drawing into the stencil buffer, but still read from it.
+            // Disable drawing into the stencil buffer, but read from it for stencil testing.
+            glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
             glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
             // Get the view from destPortal.
@@ -270,7 +270,7 @@ class PortalObject : public MeshObject
             C2 = C1 * modelMat * aboutFace * glm::inverse(destPortal->modelMat);
 
             //TODO: Some way to trick the depth buffer to not render anything behind destPortal.
-            
+
             // Re-render the scene normally from the destPortal view.
             glPushMatrix();
               glLoadMatrixf(glm::value_ptr(C2));
@@ -284,8 +284,7 @@ class PortalObject : public MeshObject
 
             //TODO: restore the old value of stencil test, depth, color.
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-            //glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);
-            glDisable(GL_STENCIL_TEST);
+            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);
         }
         else
         {
@@ -476,15 +475,15 @@ class vtk441MapperMishii : public vtk441Mapper
 
         glEnable(GL_COLOR_MATERIAL);
         glEnable(GL_CULL_FACE);
-
-            //TODO: is this necessary?
-        // Initialize the stencil buffer.
         glEnable(GL_STENCIL_TEST);
+
+        // Initialize the stencil buffer.
         glStencilFunc(GL_NEVER, 255, 0xFF);
         glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
         glStencilMask(0xFF);
         glClear(GL_STENCIL_BUFFER_BIT);
-        glDisable(GL_STENCIL_TEST);
+        glStencilFunc(GL_GEQUAL, 255, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
         if (!initialized)
             InitializeScene();
@@ -498,8 +497,7 @@ class vtk441MapperMishii : public vtk441Mapper
        if (animTime >= 3.0)
            animTime = 0.0;
        if (animationTarget != NULL)
-           animationTarget->modelMat[3][2] = 3.0 + 2.0*animTime;
-   }
+           animationTarget->modelMat[3][2] = 3.0 + 2.0*animTime; }
 };
 
 vtkStandardNewMacro(vtk441MapperMishii);
@@ -592,6 +590,7 @@ int main()
     vtkSmartPointer<vtkRenderWindow>::New();
   renWin->AddRenderer(ren);
   ren->SetViewport(0.0, 0.0, 1.0, 1);
+  renWin->StencilCapableOn();    // Important for proper portals.
 
   vtkSmartPointer<vtkRenderWindowInteractor> iren =
     vtkSmartPointer<vtkRenderWindowInteractor>::New();
