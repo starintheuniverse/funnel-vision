@@ -191,7 +191,7 @@ class Mesh
 class MeshObject
 {
   public:
-    static const int MAX_SCENE_RECURSION = 3;
+    static const int MAX_SCENE_RECURSION = 2;
     glm::mat4 modelMat;
     Mesh *mesh;
 
@@ -237,12 +237,9 @@ class PortalObject : public MeshObject
 
     virtual void Draw(int recursion_levels_left = MeshObject::MAX_SCENE_RECURSION) const
     {
-        if (destPortal != NULL && destPortal->parentScene != NULL)
+        if (recursion_levels_left > 0 && destPortal != NULL && destPortal->parentScene != NULL)
         {
-                // CAUTION: There may be inconsistency with how stencil_ref is being used.
-
             // Correct value of the stencil buffer for fragments from this portal's neighborhood.
-            int stencil_ref = 255 + recursion_levels_left - MeshObject::MAX_SCENE_RECURSION;
             int old_stencil_ref;
             glGetIntegerv(GL_STENCIL_REF, &old_stencil_ref);
 
@@ -250,7 +247,11 @@ class PortalObject : public MeshObject
             //TODO: save the former "depth configuration".
             glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
             glDepthMask(GL_FALSE);
-            //glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
+                // Reset the stencil buffer to the calling level.
+            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);  // Only if portal is viewable.
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            MeshObject::Draw(recursion_levels_left);
+                // Set the stencil buffer to the new level.
             glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);  // Only if portal is viewable.
             glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
             MeshObject::Draw(recursion_levels_left);
@@ -258,7 +259,7 @@ class PortalObject : public MeshObject
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
             // Disable drawing into the stencil buffer, but read from it for stencil testing.
-            glStencilFunc(GL_GEQUAL, stencil_ref, 0xFF);
+            glStencilFunc(GL_GEQUAL, old_stencil_ref - 1, 0xFF);
             glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
             // Get the view from destPortal.
@@ -358,16 +359,6 @@ class vtk441MapperMishii : public vtk441Mapper
     void InitializeScene()
     {
 
-        // Add a stencil buffer to the framebuffer.
-/*
-        GLuint texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        //Hack; don't change window size or things will break.
-        glTexImage2D(GL_TEXTURE_2D, 0, 1, 1200, 600, 0, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, NULL);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, texture, 0);
-*/
-
         shapes = glGenLists(2);
 
         // unitSquare (display list): Square with vertices at (+-1, +-1, 0).
@@ -423,16 +414,6 @@ class vtk441MapperMishii : public vtk441Mapper
         DisplayListMesh *cubeMesh = new DisplayListMesh(unitCube);
         meshes.push_back(squareMesh);
         meshes.push_back(cubeMesh);
- 
-        // Disabled...
-        // Mess with the modelview matrix prior to rendering some things.
-        //float retrieved_modelview[16];
-        //glGetFloatv(GL_MODELVIEW_MATRIX, retrieved_modelview);
-        //retrieved_modelview[3*4 + 2] /= 2;
-        //glLoadMatrixf(retrieved_modelview);
-        //std::cout << "------------------------------------------" << endl;
-        //mishii_PrintMatrix(std::cout, retrieved_modelview, 4, 4);
-        //std::cout << "------------------------------------------" << endl;
 
         // To make glm matrix expressions succinct.
         using namespace glm_mishii_matrix_transforms;
@@ -478,9 +459,7 @@ class vtk441MapperMishii : public vtk441Mapper
         glEnable(GL_STENCIL_TEST);
 
         // Initialize the stencil buffer.
-        glStencilFunc(GL_NEVER, 255, 0xFF);
-        glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
-        glStencilMask(0xFF);
+        glClearStencil(255);  // Maybe the correct way.
         glClear(GL_STENCIL_BUFFER_BIT);
         glStencilFunc(GL_GEQUAL, 255, 0xFF);
         glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
