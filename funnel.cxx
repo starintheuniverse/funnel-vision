@@ -3,7 +3,7 @@
  * funnel.cxx
  * Masado Ishii
  * CIS 441 "Intro Comp. Graphics" (H.Childs)
- * 2016-12-13
+ * 2016-12-26
  *
  * Description:
  *   My final project, "FunnelVision," to simulate portal-like visual effects
@@ -65,6 +65,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <cassert>
 #include <list>
 
 
@@ -191,15 +192,14 @@ class Mesh
 class MeshObject
 {
   public:
-    static const int MAX_SCENE_RECURSION = 2;
     glm::mat4 modelMat;
     Mesh *mesh;
 
     MeshObject(Mesh *mesh, glm::mat4 modelMat = glm::mat4(1.0))
             : mesh(mesh), modelMat(modelMat) {}
     virtual ~MeshObject() {};
-    virtual void Draw(int recursion_levels_left = MAX_SCENE_RECURSION) const
-    //void Draw(int recursion_levels_left = MAX_SCENE_RECURSION) const   // DEBUG hack: switch these to enable/disable portals.
+    virtual void Draw() const
+    //void Draw() const   // DEBUG hack: switch these to enable/disable portals.
     {
         glPushMatrix();
           glMultMatrixf(glm::value_ptr(modelMat));
@@ -207,12 +207,10 @@ class MeshObject
         glPopMatrix();
     }
 
-    static void DrawList(MeshObjList &l, int recursion_levels_left = MAX_SCENE_RECURSION)
+    static void DrawList(MeshObjList &l)
     {
-        if (recursion_levels_left <= 0)
-            return;
         for (MeshObjList::iterator iter = l.begin(); iter != l.end(); ++iter)
-            (*iter)->Draw(recursion_levels_left);
+            (*iter)->Draw();
     }
 };
 
@@ -225,6 +223,14 @@ class MeshObject
  */
 class PortalObject : public MeshObject
 {
+  protected:
+    // An internal mechanism to count and limit the portal recursion depth.
+    static const int MAX_PORTAL_RECURSION_DEPTH = 2;
+    static int currentPortalRecursionDepth;  // Must be class-level so that child implementations of Draw() can access.
+             // Initialization of currentPortalRecursionDepth follows class definition.
+    static PortalObject *oldDestPortal;
+             // Initialization of oldDestPortal follows class definition.
+
   public:
     MeshObjList *parentScene;
     PortalObject *destPortal;
@@ -233,67 +239,79 @@ class PortalObject : public MeshObject
             glm::mat4 modelMat = glm::mat4(1.0))
             : MeshObject(mesh, modelMat), parentScene(scene), destPortal(portal) {}
 
-    void SetDestPortal(PortalObject *portal) { destPortal = portal; }
-
-    virtual void Draw(int recursion_levels_left = MeshObject::MAX_SCENE_RECURSION) const
+    bool SetDestPortal(PortalObject *portal)
     {
-        if (recursion_levels_left > 0 && destPortal != NULL && destPortal->parentScene != NULL)
+        if (portal != NULL && portal->mesh == mesh)
         {
-            // Correct value of the stencil buffer for fragments from this portal's neighborhood.
-            int old_stencil_ref;
-            glGetIntegerv(GL_STENCIL_REF, &old_stencil_ref);
+            destPortal = portal;
+            return true;
+        }
+        else
+        {
+            std::cerr << "PortalObject::SetDestPortal(): Meshes are different."
+                    << std::endl;
+            return false;
+        }
+    }
 
-            // Paint the portal surface into just the stencil buffer.
-            //TODO: save the former "depth configuration".
-            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-            glDepthMask(GL_FALSE);
-                // Reset the stencil buffer to the calling level.
-            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);  // Only if portal is viewable.
-            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-            MeshObject::Draw(recursion_levels_left);
-                // Set the stencil buffer to the new level.
-            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);  // Only if portal is viewable.
-            glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
-            MeshObject::Draw(recursion_levels_left);
-            glDepthMask(GL_TRUE);
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    virtual void Draw() const
+    {
+        // At a recursion depth of 0, portal rendering is disabled.
+        // If this is the old_dest_portal, do not render anything.
 
-            // Disable drawing into the stencil buffer, but read from it for stencil testing.
-            glStencilFunc(GL_GEQUAL, old_stencil_ref - 1, 0xFF);
-            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        if (PortalObject::oldDestPortal != NULL && this == PortalObject::oldDestPortal)
+            return;
+
+        if (PortalObject::currentPortalRecursionDepth
+                < PortalObject::MAX_PORTAL_RECURSION_DEPTH)
+        {
+            //DEBUG
+            std::cerr << "DEBUG PortalObject::Draw(): recursion depth = "
+                    << PortalObject::currentPortalRecursionDepth
+                    << " .. Drawing as PortalObject." << std::endl;
 
             // Get the view from destPortal.
             float matrixBuffer[16];
             glm::mat4 C1, C2;
             glm::mat4 aboutFace = glm::scale(glm::mat4(), glm::vec3(-1.0f, 1.0f, -1.0f));
-            glGetFloatv(GL_MODELVIEW_MATRIX, matrixBuffer);
-            C1 = glm::make_mat4(matrixBuffer);
-            C2 = C1 * modelMat * aboutFace * glm::inverse(destPortal->modelMat);
+            glGetFloatv(GL_MODELVIEW_MATRIX, matrixBuffer);  // The current view.
+            C1 = glm::make_mat4(matrixBuffer);               // Type casting.
+            C2 = C1 * modelMat * aboutFace * glm::inverse(this->destPortal->modelMat);
+                    // The new modelview moves the "camera" to behind the destPortal.
 
-            //TODO: Some way to trick the depth buffer to not render anything behind destPortal.
+            // Any portals in the (re-)drawn scene will know it is the next recursion level.
+            // Preserve the current portal recursion depth.
+            int portalRecursionDepth = PortalObject::currentPortalRecursionDepth++;
+
+            // Preserve the oldDestPortal pointer.
+            PortalObject *oldDestPortalTrace = PortalObject::oldDestPortal;
+            PortalObject::oldDestPortal = this->destPortal;
 
             // Re-render the scene normally from the destPortal view.
             glPushMatrix();
               glLoadMatrixf(glm::value_ptr(C2));
-              MeshObject::DrawList(*(destPortal->parentScene), recursion_levels_left - 1);
+              MeshObject::DrawList(*(this->destPortal->parentScene));
             glPopMatrix();
 
-            // Paint the portal surface into just the depth buffer.
-            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-            glDepthMask(GL_TRUE);
-            MeshObject::Draw(recursion_levels_left);
-
-            //TODO: restore the old value of stencil test, depth, color.
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-            glStencilFunc(GL_GEQUAL, old_stencil_ref, 0xFF);
+            // Now return to the previous tracker value. This is safer than simply decrementing.
+            PortalObject::oldDestPortal = oldDestPortalTrace;
+            PortalObject::currentPortalRecursionDepth = portalRecursionDepth;
         }
         else
         {
-            // A deactivated portal is a plain old MeshObject.
-            MeshObject::Draw(recursion_levels_left);
+            //DEBUG
+            std::cerr << "DEBUG PortalObject::Draw(): recursion depth = "
+                    << PortalObject::currentPortalRecursionDepth
+                    << " .. Drawing as MeshObject." << std::endl;
+
+            MeshObject::Draw();
         }
     }
 };
+
+int PortalObject::currentPortalRecursionDepth = 0;
+PortalObject * PortalObject::oldDestPortal = NULL;
+
 
 
 /* ----------------
@@ -424,8 +442,8 @@ class vtk441MapperMishii : public vtk441Mapper
                 translate(mat4(), vec3(-2.0f, -3.0f, 5.0f))
                 * scale(mat4(), vec3(2.0f, 2.0f, 2.0f)));
 
+        // Construct portals.
         float d45 = atan(1);
-
         PortalObject *portal1 = new PortalObject(squareMesh, &meshObjects, NULL,
                 translate(mat4(), vec3(5.0f, 2.0f, 3.0f))
                 * rotate(mat4(), d45, vec3(1.0f, 0.0f, 0.0f))
@@ -435,9 +453,10 @@ class vtk441MapperMishii : public vtk441Mapper
                 * rotate(mat4(), 2*d45, vec3(0.0f, 1.0f, 0.0f))
                 * rotate(mat4(), 2*d45, vec3(0.0f, 0.0f, 1.0f))
                 * scale(mat4(), vec3(3.0f, 3.0f, 1.0f)));
-        portal1->SetDestPortal(portal2);
-        portal2->SetDestPortal(portal1);
+        assert( portal1->SetDestPortal(portal2) );
+        assert( portal2->SetDestPortal(portal1) );
 
+        // A list of objects which represents the scene.
         meshObjects.push_back(squareObj);
         meshObjects.push_back(cubeObj);
         meshObjects.push_back(portal1);
@@ -455,7 +474,7 @@ class vtk441MapperMishii : public vtk441Mapper
         SetupLight();
 
         glEnable(GL_COLOR_MATERIAL);
-        glEnable(GL_CULL_FACE);
+        //glEnable(GL_CULL_FACE);  // Single-sided portals are set using glStencilOpSeparate().
         glEnable(GL_STENCIL_TEST);
 
         // Initialize the stencil buffer.
@@ -507,6 +526,7 @@ class vtkTimerCallback : public vtkCommand
     virtual void Execute(vtkObject *vtkNotUsed(caller), unsigned long eventId,
                          void *vtkNotUsed(callData))
     {
+/*
       // THIS IS WHAT GETS CALLED EVERY TIMER
       //cout << "Got a timer!!" << this->TimerCount << endl;
 
@@ -523,6 +543,7 @@ class vtkTimerCallback : public vtkCommand
       // Force a render...
       if (renWin != NULL)
          renWin->Render();
+*/
     }
  
   private:
