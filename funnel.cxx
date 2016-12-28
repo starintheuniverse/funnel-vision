@@ -270,7 +270,7 @@ class PortalObject : public MeshObject
                     << PortalObject::currentPortalRecursionDepth
                     << " .. Drawing as PortalObject." << std::endl;
 
-            // Get the view from destPortal.
+            // Get the view transformation relative to destPortal.
             float matrixBuffer[16];
             glm::mat4 C1, C2;
             glm::mat4 aboutFace = glm::scale(glm::mat4(), glm::vec3(-1.0f, 1.0f, -1.0f));
@@ -279,13 +279,30 @@ class PortalObject : public MeshObject
             C2 = C1 * modelMat * aboutFace * glm::inverse(this->destPortal->modelMat);
                     // The new modelview moves the "camera" to behind the destPortal.
 
-            // Any portals in the (re-)drawn scene will know it is the next recursion level.
+            // Recursion book-keeping:
+            // Update the statically-scoped portal recursion depth for the scene about to be drawn.
             // Preserve the current portal recursion depth.
             int portalRecursionDepth = PortalObject::currentPortalRecursionDepth++;
-
             // Preserve the oldDestPortal pointer.
             PortalObject *oldDestPortalTrace = PortalObject::oldDestPortal;
             PortalObject::oldDestPortal = this->destPortal;
+
+            // Initialize the next recursive portal "viewport".
+            glStencilMask(0xFF);                     // Enable writing to the stencil buffer.
+            glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);  // This region is marked as a deeper recursive level.
+            glDepthMask(GL_FALSE);                   // The portal surface is not physical... yet.
+            glBlendFunc(GL_ZERO, GL_ZERO);           // Paints a literal silhouette into the color buffer.
+            MeshObject::Draw();                      // Do the painting.
+            // Back to defaults.
+            glBlendFunc(GL_ONE, GL_ZERO);
+            glDepthMask(GL_TRUE);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            glStencilMask(0x0);
+
+            // Set the stencil test ref value to constrain scene rendering to the poral bounds.
+            glStencilFunc(GL_GEQUAL, 255 - PortalObject::currentPortalRecursionDepth, 0xFF);
+
+            /* Missing the depth-buffer trick... */
 
             // Re-render the scene normally from the destPortal view.
             glPushMatrix();
@@ -296,6 +313,15 @@ class PortalObject : public MeshObject
             // Now return to the previous tracker value. This is safer than simply decrementing.
             PortalObject::oldDestPortal = oldDestPortalTrace;
             PortalObject::currentPortalRecursionDepth = portalRecursionDepth;
+
+            // Restore the stencil test ref value for the scene outside this portal.
+            glStencilFunc(GL_GEQUAL, 255 - PortalObject::currentPortalRecursionDepth, 0xFF);
+
+            // "Cap" the portal viewport in the stencil and depth buffers as an ordinary surface.
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);  // Disable writing to the color buffer.
+            MeshObject::Draw();                                   // Do the painting.
+            // Back to defaults.
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         }
         else
         {
@@ -475,13 +501,21 @@ class vtk441MapperMishii : public vtk441Mapper
 
         glEnable(GL_COLOR_MATERIAL);
         //glEnable(GL_CULL_FACE);  // Single-sided portals are set using glStencilOpSeparate().
-        glEnable(GL_STENCIL_TEST);
+        glEnable(GL_STENCIL_TEST);  // Needed for portal boundaries.
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);  // Needed to empty portal viewport background.
 
-        // Initialize the stencil buffer.
-        glClearStencil(255);  // Maybe the correct way.
+        // Initialize the stencil buffer. This is the outermost level of portal recursion.
+        // Also initialize the color buffer to black.
+        glClearStencil(255);
+        //glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_STENCIL_BUFFER_BIT);
-        glStencilFunc(GL_GEQUAL, 255, 0xFF);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Initialize the stencil test.
+        glStencilFunc(GL_GEQUAL, 255, 0xFF);        // Outermost ref value.
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);  // Default update action.
+        glStencilMask(0x0);                         // By default, read-only.
 
         if (!initialized)
             InitializeScene();
