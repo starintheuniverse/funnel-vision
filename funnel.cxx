@@ -403,8 +403,7 @@ class vtk441MapperMishii : public vtk441Mapper
                 ++iter)
             delete *iter;
     }
-
-  protected:
+protected:
     void InitializeScene()
     {
 
@@ -505,7 +504,8 @@ class vtk441MapperMishii : public vtk441Mapper
         SetupLight();
 
         glEnable(GL_COLOR_MATERIAL);
-        //glEnable(GL_CULL_FACE);  // Single-sided portals are set using glStencilOpSeparate().
+        glEnable(GL_CULL_FACE);  // This is not the correct way to implement single-sided portals.
+                                 // Single-sided portals should be configured using glStencilOpSeparate().
         glEnable(GL_STENCIL_TEST);  // Needed for portal boundaries.
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);  // Needed to empty portal viewport background.
@@ -513,9 +513,9 @@ class vtk441MapperMishii : public vtk441Mapper
         // Initialize the stencil buffer. This is the outermost level of portal recursion.
         // Also initialize the color buffer to black.
         glClearStencil(255);
-        //glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_STENCIL_BUFFER_BIT);
-        //glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        //glClear(GL_STENCIL_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Initialize the stencil test.
         glStencilFunc(GL_GEQUAL, 255, 0xFF);        // Outermost ref value.
@@ -565,7 +565,6 @@ class vtkTimerCallback : public vtkCommand
     virtual void Execute(vtkObject *vtkNotUsed(caller), unsigned long eventId,
                          void *vtkNotUsed(callData))
     {
-/*
       // THIS IS WHAT GETS CALLED EVERY TIMER
       //cout << "Got a timer!!" << this->TimerCount << endl;
 
@@ -582,7 +581,6 @@ class vtkTimerCallback : public vtkCommand
       // Force a render...
       if (renWin != NULL)
          renWin->Render();
-*/
     }
  
   private:
