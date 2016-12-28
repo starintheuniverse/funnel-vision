@@ -279,13 +279,8 @@ class PortalObject : public MeshObject
             C2 = C1 * modelMat * aboutFace * glm::inverse(this->destPortal->modelMat);
                     // The new modelview moves the "camera" to behind the destPortal.
 
-            // Recursion book-keeping:
-            // Update the statically-scoped portal recursion depth for the scene about to be drawn.
-            // Preserve the current portal recursion depth.
-            int portalRecursionDepth = PortalObject::currentPortalRecursionDepth++;
-            // Preserve the oldDestPortal pointer.
-            PortalObject *oldDestPortalTrace = PortalObject::oldDestPortal;
-            PortalObject::oldDestPortal = this->destPortal;
+            // DEBUG: This should ensure the correct preliminary test, which affects the stencil update.
+            //glStencilFunc(GL_GEQUAL, 255 - PortalObject::currentPortalRecursionDepth, 0xFF);
 
             // Initialize the next recursive portal "viewport".
             glStencilMask(0xFF);                     // Enable writing to the stencil buffer.
@@ -298,6 +293,14 @@ class PortalObject : public MeshObject
             glDepthMask(GL_TRUE);
             glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
             glStencilMask(0x0);
+
+            // Recursion book-keeping:
+            // Update the statically-scoped portal recursion depth for the scene about to be drawn.
+            // Preserve the current portal recursion depth.
+            int portalRecursionDepth = PortalObject::currentPortalRecursionDepth++;
+            // Preserve the oldDestPortal pointer.
+            PortalObject *oldDestPortalTrace = PortalObject::oldDestPortal;
+            PortalObject::oldDestPortal = this->destPortal;
 
             // Set the stencil test ref value to constrain scene rendering to the poral bounds.
             glStencilFunc(GL_GEQUAL, 255 - PortalObject::currentPortalRecursionDepth, 0xFF);
@@ -318,10 +321,12 @@ class PortalObject : public MeshObject
             glStencilFunc(GL_GEQUAL, 255 - PortalObject::currentPortalRecursionDepth, 0xFF);
 
             // "Cap" the portal viewport in the stencil and depth buffers as an ordinary surface.
+            glStencilMask(0xFF);                                  // Enable writing to the stencil buffer.
             glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);  // Disable writing to the color buffer.
             MeshObject::Draw();                                   // Do the painting.
             // Back to defaults.
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glStencilMask(0x0);
         }
         else
         {
