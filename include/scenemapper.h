@@ -2,6 +2,7 @@
  * scenemapper.h
  * Masado Ishii
  * v0.1 2016-12-26
+ * v0.2 2017-08-04 - New scene content.
  *
  * Description: Initialization of the GL environment; definitions of scene 
  *   and animations.
