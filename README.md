@@ -10,8 +10,8 @@ v0.2 2017-08-05
 ----
 
 
-Building and Running:
----------------------
+Building and Running
+--------------------
 The FunnelVision application depends on  
 
 * VTK (>= v6.3.0)
@@ -29,9 +29,14 @@ To build from source using CMake, run the following from the project root direct
 Then to run, type `./funnelvision` .
 
 
-Attributions:
--------------
+Attributions
+------------
 * Interactor and mapper derived from examples by Hank Childs.
 * glm usage derived from the glm docs at <glm.g-truc.net>.
 * Other source code used as provided by Hank Childs, presumably derivative
     of Kitware coders K.Martin, W.Schroeder, and B.Lorensen.
+
+
+License
+-------
+This project is licensed under the terms of the MIT license.
