@@ -3,6 +3,8 @@ FunnelVision
 A rendering technique to simulate portal-like visual effects, built on the OpenGL and VTK frameworks.
 Continuation of my final project from CIS 441 "Intro Comp. Graphics" w/ Prof. Hank Childs.
 
+See it in action here: <https://vimeo.com/230228879>
+
 Masado Ishii  
 v0.1 2016-12-26  
 v0.2 2017-08-05
